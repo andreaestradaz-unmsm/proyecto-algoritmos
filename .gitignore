@@ -1,0 +1,10 @@
+# Binarios y objetos generados al compilar
+*.o
+*.exe
+reproductor
+
+# Caché y configuración local del editor (rutas propias de cada PC)
+.cache/
+.vscode/
+.clangd
+

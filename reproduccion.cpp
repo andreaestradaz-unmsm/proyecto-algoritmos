@@ -8,7 +8,6 @@ void GestorReproduccion::aplicarShuffleFisherYates(ListaDobleCircular& lista, un
     if (n <= 1) {
         return;
     }
-
     std::mt19937 generador(semilla);
 
     for (int i = n - 1; i >= 1; --i) {

@@ -45,14 +45,10 @@ int main() {
     biblioteca.mostrar("BIBLIOTECA GENERAL DE CANCIONES");
 
     // ------------------------------------------------------------------------
-    // TODO (JEREMY): Descomentar cuando ui.cpp, lista_doble_circular.cpp y
-    //                reproduccion.cpp estén implementados por el equipo:
+    // INTERFAZ DE CONSOLA (JEREMY): menus de biblioteca, playlists y reproductor
     // ------------------------------------------------------------------------
-    /*
     InterfazConsola app;
     app.iniciar();
-    */
 
     return 0;
 }
-

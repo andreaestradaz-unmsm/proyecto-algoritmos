@@ -9,12 +9,11 @@
 
 /**
  * ============================================================================
- * PARTE DE JEREMY — CABECERA (SOLO DECLARACIONES)
+ * PARTE DE JEREMY — CABECERA (interfaz de consola)
  * ============================================================================
- * IMPORTANTE PARA JEREMY:
- * Este archivo (.h) es solo el índice con los nombres de las funciones.
- * NO escribas tu código aquí. Abre el archivo "ui.cpp" y
- * escribe tu código donde dice: // <--- PON TU CÓDIGO AQUÍ
+ * La parte PUBLICA es la misma que se acordo con el equipo (no cambia).
+ * Solo se agregaron declaraciones PRIVADAS auxiliares para no repetir codigo
+ * dentro de los menus. El codigo esta en "ui.cpp".
  * ============================================================================
  */
 
@@ -27,6 +26,15 @@ private:
     ListaDobleCircular* playlists[MAX_PLAYLISTS];  // Arreglo de punteros a las playlists creadas
     int cantidadPlaylists;
     int indicePlaylistActiva;
+    bool bibliotecaModificada;                     // true si hay cambios sin guardar en biblioteca.csv
+
+    // --- Auxiliares internos (no forman parte de la interfaz acordada) ---
+    bool hayPlaylistActiva() const;
+    bool existeNombrePlaylist(const std::string& nombre, int indiceIgnorado = -1) const;
+    void listarPlaylists() const;
+    int  pedirIndicePlaylist(const std::string& mensaje) const;  // devuelve indice (desde 0) o -1
+    int  crearPlaylist(const std::string& nombre);               // devuelve indice o -1 si no hay espacio
+    void eliminarPlaylist(int indice);
 
 public:
     InterfazConsola();

@@ -19,7 +19,7 @@ MotorAudio::MotorAudio()
       segundosBaseSimulado(0) {
     pEngine = new ma_engine();
     pSound = new ma_sound();
-    inicializar();
+    // inicializar();
 }
 
 // Destructor: detiene el sonido y libera la memoria de miniaudio
@@ -67,10 +67,8 @@ void MotorAudio::liberar() {
 
 // Carga e inicia la pista multimedia (o activa el reloj simulado si el archivo no existe)
 bool MotorAudio::play(const Cancion& cancion) {
-    if (soundCargado && pSound != nullptr) {
-        ma_sound_stop(pSound);
-        ma_sound_uninit(pSound);
-        soundCargado = false;
+    if (!engineInicializado) {
+        inicializar();
     }
 
     estado.idCancionActiva = cancion.getId();

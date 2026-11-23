@@ -14,7 +14,7 @@ if errorlevel 1 (
 )
 
 echo Compilando...
-g++ -std=c++17 -Wall -Wextra -Wno-unused-parameter main.cpp cancion.cpp lista_simple.cpp lista_doble_circular.cpp reproduccion.cpp ui.cpp -o reproductor.exe
+g++ -std=c++17 -Wall -Wextra -Wno-unused-parameter main.cpp cancion.cpp lista_simple.cpp lista_doble_circular.cpp reproduccion.cpp ui.cpp motor_audio.cpp extractor_metadata.cpp -o reproductor.exe
 if errorlevel 1 (
     echo.
     echo [ERROR] La compilacion fallo. Revisa los mensajes de arriba.
@@ -26,4 +26,3 @@ echo [OK] Compilado. Ejecutando...
 echo.
 reproductor.exe
 pause
-

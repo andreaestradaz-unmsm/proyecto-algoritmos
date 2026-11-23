@@ -20,18 +20,17 @@
  * - Mantiene en memoria los TADs reales del curso sin usar contenedores STL:
  *   ListaSimple (biblioteca e historial) y ListaDobleCircular* [20].
  * - Serializa manualmente a JSON RFC-8259 compatible con los modelos Dart.
- * - Incluye los puntos delimitados `[ESPACIO PARA ESTUDIANTE 1]` donde se
- *   conectara el motor de audio real (`miniaudio.h`), los tags ID3/APIC y los
- *   campos extendidos de `Cancion`.
+ * - Integra el motor de audio real (miniaudio), la extraccion de tags/caratulas
+ *   y la compatibilidad de metadatos extendidos del TAD Cancion.
  * ============================================================================
  */
 
-// === [ESPACIO PARA ESTUDIANTE 1: HEADERS Y ESTADO DE AUDIO REAL] ============
-// Cuando Estudiante 1 implemente el motor de audio (`miniaudio.h`) y
-// `EstadoReproduccionActual`, incluir aqui su cabecera (por ejemplo:
-// #include "audio_engine.h") y declarar la instancia o manejador global de
-// audio si corresponde.
-// ============================================================================
+// Modulo multimedia nativo (miniaudio) y extractor de metadatos (ID3v2/FLAC/WAV)
+#include "motor_audio.h"
+#include "extractor_metadata.h"
+
+// Instancia global del motor de audio que gestiona la reproduccion fisica
+static MotorAudio g_motorAudio;
 
 namespace {
 
@@ -39,8 +38,7 @@ namespace {
 // Estructuras propias con nodos y punteros (sin std::vector ni std::map)
 // ----------------------------------------------------------------------------
 
-// Almacena metadatos extendidos por ID de cancion mientras Estudiante 1
-// incorpora rutaArchivo, portadaUrl y portadaBytes directamente en `Cancion`.
+// Almacena metadatos extendidos por ID de cancion sincronizados con las listas en memoria
 struct NodoMetaCancion {
     int cancionId;
     std::string rutaArchivo;
@@ -395,10 +393,8 @@ void limpiarEstadoReproduccionPorVacio() {
     g_estado.tieneMensajeEstado = false;
     g_estado.mensajeEstado = "";
 
-    // === [ESPACIO PARA ESTUDIANTE 1: DETENER AUDIO REAL] ===================
-    // Detener el stream de audio activo en `miniaudio.h` cuando no queda
-    // ninguna cancion o playlist activa.
-    // =======================================================================
+    // Detiene la reproduccion fisica de audio al no quedar pistas activas
+    g_motorAudio.stop();
 }
 
 // ----------------------------------------------------------------------------
@@ -462,10 +458,10 @@ void sincronizarPlaybackConPlaylistActiva() {
         g_estado.posicionActualSegundos = 0;
     }
 
-    // === [ESPACIO PARA ESTUDIANTE 1: SINCRONIZAR PISTA ACTIVA EN AUDIO] =====
-    // Si cambio la cancion activa al cambiar o editar playlist, precargar o
-    // detener el reproductor real (`miniaudio.h`) segun `g_estado.tieneCancionActual`.
-    // =======================================================================
+    // Si la lista quedo vacia y no hay cancion que deba sonar, detiene el audio
+    if (!g_estado.tieneCancionActual) {
+        g_motorAudio.stop();
+    }
 }
 
 bool existeCancionEnCualquierLugar(int cancionId, Cancion& cancionEncontrada) {
@@ -518,12 +514,24 @@ std::string serializarCancionJson(const Cancion& c) {
         tamanoBytes = meta->tamanoBytes;
     }
 
-    // === [ESPACIO PARA ESTUDIANTE 1: CAMPOS EXTENDIDOS DE CANCION] ==========
-    // Cuando Estudiante 1 agregue getters en `Cancion` (ej. `getRutaArchivo()`,
-    // `getPortadaUrl()`), leerlos aqui si `rutaArchivo` / `portadaUrl` vienen
-    // directamente dentro del objeto `Cancion`:
-    //   if (rutaArchivo.empty() && !c.getRutaArchivo().empty()) { ... }
-    // =======================================================================
+    // Prioriza los metadatos y rutas asignados directamente en el TAD Cancion
+    if (rutaArchivo.empty() && !c.getRutaArchivo().empty()) {
+        rutaArchivo = c.getRutaArchivo();
+        esArchivoLocal = c.getEsArchivoLocal();
+    }
+    if (portadaUrl.empty() && !c.getPortada().empty()) {
+        portadaUrl = c.getPortada();
+    }
+    if (!esFavorita && c.getEsFavorita()) {
+        esFavorita = true;
+    }
+    if (!metadataExtraida && c.getMetadataExtraida()) {
+        metadataExtraida = true;
+    }
+    if (!tieneTamano && c.getTamanoBytes() > 0) {
+        tieneTamano = true;
+        tamanoBytes = c.getTamanoBytes();
+    }
 
     std::string json = "{";
     json += "\"id\":" + std::to_string(c.getId()) + ",";
@@ -655,11 +663,12 @@ bool parsearLineaCSVExtendida(
         }
     }
 
-    // === [ESPACIO PARA ESTUDIANTE 1: CSV NATIVO DE 7 COLUMNAS] ===============
-    // Cuando Estudiante 1 extienda `Cancion::desdeCSV` para leer las 7 columnas
-    // (id;titulo;artista;duracion;genero;ruta_archivo;portada) directamente, se
-    // podra delegar la linea completa a `Cancion::desdeCSV(linea, outCancion, delimitador)`.
-    // =======================================================================
+    // Parsea la linea CSV completa (5, 6 o 7 columnas) utilizando Cancion::desdeCSV
+    if (Cancion::desdeCSV(linea, outCancion, delimitador)) {
+        outRutaArchivo = outCancion.getRutaArchivo();
+        outPortadaUrl = outCancion.getPortada();
+        return true;
+    }
     if (!Cancion::desdeCSV(lineaCincoCols, outCancion, delimitador)) {
         return false;
     }
@@ -761,9 +770,8 @@ void registrarCancionEnHistorialInterno(const Cancion& cancion, const std::strin
 BRIDGE_API int bridge_init(const char* ruta_biblioteca_csv) {
     bridge_reset();
 
-    // === [ESPACIO PARA ESTUDIANTE 1: INICIALIZAR MOTOR MINIAUDIO] ============
-    // Inicializar `ma_engine` / dispositivo de audio real de `miniaudio.h`.
-    // =======================================================================
+    // Inicializa el dispositivo de salida PCM nativo a traves de miniaudio
+    g_motorAudio.inicializar();
 
     std::string ruta = aStringSeguro(ruta_biblioteca_csv);
     if (!ruta.empty()) {
@@ -774,9 +782,8 @@ BRIDGE_API int bridge_init(const char* ruta_biblioteca_csv) {
 }
 
 BRIDGE_API void bridge_shutdown(void) {
-    // === [ESPACIO PARA ESTUDIANTE 1: LIBERAR MOTOR MINIAUDIO] ================
-    // Detener la reproduccion en curso y liberar `ma_engine_uninit(...)`.
-    // =======================================================================
+    // Detiene la reproduccion y desvincula los recursos nativos de audio
+    g_motorAudio.liberar();
 
     bridge_reset();
     g_estado.inicializado = false;
@@ -798,6 +805,8 @@ BRIDGE_API void bridge_reset(void) {
 
     limpiarMetaCanciones();
     limpiarMetaHistorial();
+    ExtractorMetadata::limpiarCachePortadas();
+    g_motorAudio.stop();
 
     g_estado.tieneCancionActual = false;
     g_estado.cancionActual = Cancion();
@@ -963,12 +972,18 @@ BRIDGE_API char* bridge_importar_archivo_audio_json(
         }
     }
 
-    // === [ESPACIO PARA ESTUDIANTE 1: EXTRACCION DE TAGS Y DURACION REAL] ====
-    // Leer aqui tags ID3v2/Vorbis reales, duracion real desde el archivo y
-    // extraer la caratula embebida (APIC/PICTURE) guardando su ruta o bytes,
-    // actualizando `tituloInferido`, `artistaInferido`, `generoInferido`,
-    // `portadaInferida` y `duracionCalculada`.
-    // =======================================================================
+    // Extrae metadatos reales desde el archivo multimedia (tags ID3v2, Vorbis, RIFF y caratula)
+    MetadatosAudio metaAudio = ExtractorMetadata::extraer(ruta);
+    if (!metaAudio.titulo.empty()) tituloInferido = metaAudio.titulo;
+    if (!metaAudio.artista.empty()) artistaInferido = metaAudio.artista;
+    if (!metaAudio.genero.empty()) generoInferido = metaAudio.genero;
+    if (metaAudio.duracionSegundos > 0 && duracionCalculada <= 0) duracionCalculada = metaAudio.duracionSegundos;
+    if (!metaAudio.rutaPortadaCache.empty() && portadaInferida.empty()) portadaInferida = metaAudio.rutaPortadaCache;
+    if (metaAudio.tamanoBytes > 0 && tamano_bytes <= 0) tamano_bytes = metaAudio.tamanoBytes;
+    if (!metaAudio.bytesPortada.empty()) {
+        int idProximo = bridge_siguiente_id_libre_biblioteca();
+        ExtractorMetadata::registrarPortadaBytes(idProximo, metaAudio.bytesPortada);
+    }
 
     std::string titOvr = trimTexto(aStringSeguro(titulo_override));
     std::string artOvr = trimTexto(aStringSeguro(artista_override));
@@ -1133,11 +1148,18 @@ BRIDGE_API unsigned char* bridge_obtener_portada_bytes(int cancion_id, int* out_
     }
     (void)cancion_id;
 
-    // === [ESPACIO PARA ESTUDIANTE 1: CARATULA EMBEBIDA APIC/PICTURE] =========
-    // Obtener el buffer de bytes de la caratula de la cancion `cancion_id`,
-    // copiarlo con `std::malloc(tamano)` y asignar `*out_tamano = tamano`.
-    // =======================================================================
-
+    // Recupera la caratula embebida y reserva un buffer con malloc para gestion de memoria en Dart FFI
+    const std::vector<uint8_t>* bytes = ExtractorMetadata::obtenerPortadaBytes(cancion_id);
+    if (bytes != nullptr && !bytes->empty()) {
+        unsigned char* buffer = static_cast<unsigned char*>(std::malloc(bytes->size()));
+        if (buffer != nullptr) {
+            std::memcpy(buffer, bytes->data(), bytes->size());
+            if (out_tamano != nullptr) {
+                *out_tamano = static_cast<int>(bytes->size());
+            }
+            return buffer;
+        }
+    }
     return nullptr;
 }
 
@@ -1711,11 +1733,13 @@ BRIDGE_API int bridge_cargar_playlist_archivo_csv(
 BRIDGE_API char* bridge_obtener_estado_reproduccion_json(void) {
     inicializarPuenteSiHaceFalta();
 
-    // === [ESPACIO PARA ESTUDIANTE 1: LEER PROGRESO REAL DEL AUDIO] ===========
-    // Consultar a `EstadoReproduccionActual` del motor de audio (`miniaudio.h`)
-    // para actualizar `g_estado.posicionActualSegundos`, `g_estado.isPlaying`
-    // y detectar si la pista termino de sonar de manera natural.
-    // =======================================================================
+    // Sincroniza la posicion actual y el estado consultando el cursor PCM del motor de audio
+    g_motorAudio.sincronizarEstado();
+    EstadoReproduccionActual estAudio = g_motorAudio.getEstadoActual();
+    if (g_estado.tieneCancionActual) {
+        g_estado.posicionActualSegundos = estAudio.posicionActualSegundos;
+        g_estado.isPlaying = estAudio.isPlaying;
+    }
 
     std::string plActivaId = "";
     bool hayPlActiva = (g_estado.indicePlaylistActiva >= 0 &&
@@ -1783,10 +1807,15 @@ BRIDGE_API char* bridge_reproducir_cancion_en_playlist_json(
         agregarMetaHistorialAlInicio(pl->getNombre());
     }
 
-    // === [ESPACIO PARA ESTUDIANTE 1: REPRODUCIR PISTA EN AUDIO REAL] ========
-    // Cargar `rutaArchivo` asociada a `actual->getId()` en `miniaudio.h`,
-    // aplicar `g_estado.volumen` e iniciar la reproduccion real.
-    // =======================================================================
+    // Envia la pista seleccionada en la playlist circular al motor de audio nativo
+    g_motorAudio.setModoRepeticion(pl->getModoRepeticion());
+    g_motorAudio.setVolume(g_estado.volumen);
+    Cancion cAudio = *actual;
+    NodoMetaCancion* mAudio = buscarMetaCancion(actual->getId());
+    if (mAudio != nullptr && !mAudio->rutaArchivo.empty()) {
+        cAudio.setRutaArchivo(mAudio->rutaArchivo);
+    }
+    g_motorAudio.play(cAudio);
 
     return aHeapCString(serializarCancionJson(*actual));
 }
@@ -1842,9 +1871,14 @@ BRIDGE_API char* bridge_reproducir_cancion_directa_json(
 
     registrarCancionEnHistorialInterno(cancion, "Biblioteca General");
 
-    // === [ESPACIO PARA ESTUDIANTE 1: REPRODUCIR PISTA DIRECTA EN AUDIO REAL] =
-    // Cargar `rutaArchivo` de `cancion.getId()` en `miniaudio.h` e iniciar audio.
-    // =======================================================================
+    // Inicia la reproduccion de la cancion seleccionada de la biblioteca general en el motor de audio
+    g_motorAudio.setVolume(g_estado.volumen);
+    Cancion cDirecta = cancion;
+    NodoMetaCancion* mDirecta = buscarMetaCancion(cancion.getId());
+    if (mDirecta != nullptr && !mDirecta->rutaArchivo.empty()) {
+        cDirecta.setRutaArchivo(mDirecta->rutaArchivo);
+    }
+    g_motorAudio.play(cDirecta);
 
     return aHeapCString(serializarCancionJson(cancion));
 }
@@ -1868,9 +1902,8 @@ BRIDGE_API char* bridge_siguiente_cancion_json(void) {
         g_estado.mensajeEstado =
             "Fin de la playlist (modo Sin repeticion). Cambia el modo o retrocede.";
 
-        // === [ESPACIO PARA ESTUDIANTE 1: PAUSAR/DETENER FIN DE LISTA] =======
-        // Detener o pausar `miniaudio.h` al alcanzar el final en SIN_REPETICION.
-        // ===================================================================
+        // Detiene el motor de audio al alcanzar el fin de la playlist en modo SIN_REPETICION
+        g_motorAudio.stop();
 
         return aHeapCString("null");
     }
@@ -1891,9 +1924,15 @@ BRIDGE_API char* bridge_siguiente_cancion_json(void) {
         agregarMetaHistorialAlInicio(activa->getNombre());
     }
 
-    // === [ESPACIO PARA ESTUDIANTE 1: CAMBIAR PISTA EN AUDIO REAL] ===========
-    // Cargar y reproducir la pista `siguiente->getId()` en `miniaudio.h`.
-    // =======================================================================
+    // Envia la pista siguiente al motor de audio real aplicando volumen y modo
+    g_motorAudio.setModoRepeticion(activa->getModoRepeticion());
+    g_motorAudio.setVolume(g_estado.volumen);
+    Cancion cSig = *siguiente;
+    NodoMetaCancion* mSig = buscarMetaCancion(siguiente->getId());
+    if (mSig != nullptr && !mSig->rutaArchivo.empty()) {
+        cSig.setRutaArchivo(mSig->rutaArchivo);
+    }
+    g_motorAudio.play(cSig);
 
     return aHeapCString(serializarCancionJson(*siguiente));
 }
@@ -1930,9 +1969,15 @@ BRIDGE_API char* bridge_anterior_cancion_json(void) {
         agregarMetaHistorialAlInicio(activa->getNombre());
     }
 
-    // === [ESPACIO PARA ESTUDIANTE 1: CAMBIAR PISTA EN AUDIO REAL] ===========
-    // Cargar y reproducir la pista `anterior->getId()` en `miniaudio.h`.
-    // =======================================================================
+    // Envia la pista anterior al motor de audio real aplicando volumen y modo
+    g_motorAudio.setModoRepeticion(activa->getModoRepeticion());
+    g_motorAudio.setVolume(g_estado.volumen);
+    Cancion cAnt = *anterior;
+    NodoMetaCancion* mAnt = buscarMetaCancion(anterior->getId());
+    if (mAnt != nullptr && !mAnt->rutaArchivo.empty()) {
+        cAnt.setRutaArchivo(mAnt->rutaArchivo);
+    }
+    g_motorAudio.play(cAnt);
 
     return aHeapCString(serializarCancionJson(*anterior));
 }
@@ -1972,9 +2017,12 @@ BRIDGE_API void bridge_set_playing(int is_playing) {
     g_estado.tieneMensajeEstado = false;
     g_estado.mensajeEstado = "";
 
-    // === [ESPACIO PARA ESTUDIANTE 1: PLAY / PAUSE EN AUDIO REAL] ============
-    // Reanudar o pausar la reproduccion actual en `miniaudio.h`.
-    // =======================================================================
+    // Reanuda o pausa el stream de audio nativo segun el comando recibido
+    if (is_playing != 0) {
+        g_motorAudio.resume();
+    } else {
+        g_motorAudio.pause();
+    }
 }
 
 BRIDGE_API void bridge_seek_to(int posicion_segundos) {
@@ -1987,9 +2035,8 @@ BRIDGE_API void bridge_seek_to(int posicion_segundos) {
     g_estado.tieneMensajeEstado = false;
     g_estado.mensajeEstado = "";
 
-    // === [ESPACIO PARA ESTUDIANTE 1: SEEK EN AUDIO REAL] ====================
-    // Posicionar el cursor de lectura PCM/decodificador en `clamped` segundos.
-    // =======================================================================
+    // Realiza el salto al segundo solicitado ajustando los frames PCM del decodificador
+    g_motorAudio.seekTo(clamped);
 }
 
 BRIDGE_API void bridge_set_volumen(double volumen) {
@@ -1999,9 +2046,8 @@ BRIDGE_API void bridge_set_volumen(double volumen) {
     if (v > 1.0) v = 1.0;
     g_estado.volumen = v;
 
-    // === [ESPACIO PARA ESTUDIANTE 1: VOLUMEN EN AUDIO REAL] =================
-    // Aplicar ganancia/volumen `v` (`0.0..1.0`) en `ma_engine_set_volume(...)`.
-    // =======================================================================
+    // Ajusta la ganancia de volumen (0.0 a 1.0) en el motor de audio nativo
+    g_motorAudio.setVolume(v);
 }
 
 BRIDGE_API void bridge_set_modo_repeticion(int modo_codigo) {

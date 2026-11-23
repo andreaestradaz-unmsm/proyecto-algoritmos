@@ -461,11 +461,37 @@ class MusicPlayerController extends ChangeNotifier {
   }
 
   // --- Temporizador de Progreso en Tiempo Real ---
+  bool _finDePistaProcesado = false;
+
   void _iniciarTickerProgreso() {
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       final st = playbackState;
-      if (!st.isPlaying || st.cancionActual == null) {
+      if (st.cancionActual == null) {
+        return;
+      }
+
+      // Motor nativo (C++ / miniaudio): el audio avanza solo. Dart únicamente
+      // refresca la UI y detecta el fin de pista para pedir el siguiente nodo.
+      if (_repository.motorNativoGestionaProgreso) {
+        final terminada = st.duracionTotalSegundos > 0 &&
+            st.posicionActualSegundos >= st.duracionTotalSegundos;
+        if (terminada && !_finDePistaProcesado) {
+          _finDePistaProcesado = true;
+          final sig = _repository.siguienteCancion();
+          if (sig == null) {
+            // SIN_REPETICION al llegar a cola: se detiene.
+            _repository.setPlaying(false);
+          }
+        } else if (!terminada) {
+          _finDePistaProcesado = false;
+        }
+        notifyListeners();
+        return;
+      }
+
+      // Mock en memoria: simula el avance segundo a segundo.
+      if (!st.isPlaying) {
         return;
       }
       if (st.posicionActualSegundos + 1 < st.duracionTotalSegundos) {

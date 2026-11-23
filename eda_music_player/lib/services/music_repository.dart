@@ -16,6 +16,10 @@ import '../models/playlist.dart';
 abstract class MusicRepository {
   static const int maxPlaylists = 20;
 
+  /// `true` cuando un motor nativo (C++ / miniaudio) avanza la posición por sí
+  /// solo; el controlador entonces NO debe simular el progreso con `seekTo(+1)`.
+  bool get motorNativoGestionaProgreso;
+
   // ===========================================================================
   // 1. BIBLIOTECA GENERAL (ListaSimple)
   // ===========================================================================

@@ -16,6 +16,9 @@ import 'music_repository.dart';
 /// - `GestorReproduccion::aplicarShuffleFisherYates`, `moverCancion`, `fusionarListas`
 /// - Serialización y parser CSV con delimitador `;` compatible con `biblioteca.csv`.
 class MockMusicRepository implements MusicRepository {
+  @override
+  bool get motorNativoGestionaProgreso => false;
+
   MockMusicRepository() {
     _inicializarDatosSemilla();
   }

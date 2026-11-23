@@ -2,12 +2,15 @@ import 'package:material_ui/material_ui.dart';
 
 import 'app/theme/app_theme.dart';
 import 'screens/main_shell_screen.dart';
+import 'services/cpp_music_repository.dart';
 import 'services/mock_music_repository.dart';
 import 'services/music_player_controller.dart';
 import 'services/music_repository.dart';
 
 void main() {
-  runApp(const EdaMusicPlayerApp());
+  runApp(EdaMusicPlayerApp(
+    repository: CppMusicRepository(), // Reemplaza a MockMusicRepository()
+  ));
 }
 
 /// Aplicación principal del Reproductor de Música con Listas de Reproducción
@@ -46,6 +49,10 @@ class _EdaMusicPlayerAppState extends State<EdaMusicPlayerApp> {
   @override
   void dispose() {
     _controller.dispose();
+    final repo = widget.repository;
+    if (repo is CppMusicRepository) {
+      repo.dispose(); // bridge_shutdown(): libera TADs y motor de audio
+    }
     super.dispose();
   }
 

@@ -96,3 +96,8 @@ Runner.xcworkspace/
 linux/flutter/ephemeral/
 windows/flutter/ephemeral/
 
+eda_music_player/eda_music_bridge.dll
+*.dll
+*.exe
+*.so
+*.o
